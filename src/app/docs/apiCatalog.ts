@@ -76,7 +76,7 @@ export const API_GROUPS: ApiGroup[] = [
           'Fans out to the heavy feeds in parallel and returns only the counts — roughly 100 bytes instead of 10 MB of GeoJSON.',
         returns: ['stats', 'timestamp'],
         notes:
-          '`stats` contains `flights`, `sats`, `cctv`, `weather`, `nuclear`, `incidents`. Cached `s-maxage=30, stale-while-revalidate=60`, so 10k concurrent dashboard boots collapse into one upstream fetch per minute.',
+          '`stats` contains `flights`, `sats`, `cctv`, `weather`, `nuclear`, `incidents`. CCTV is counted from the in-memory index (`/api/cctv?count=1`) so a dashboard boot does not serialise the 8 MB catalogue. Cached `s-maxage=30, stale-while-revalidate=60`.',
       },
     ],
   },
@@ -267,10 +267,12 @@ export const API_GROUPS: ApiGroup[] = [
         method: 'GET',
         summary: 'Public camera networks, optionally filtered by region or radius.',
         params: [
-          { name: 'region', desc: 'Restrict to a named provider region.', example: 'london' },
+          { name: 'region', desc: 'Named provider region, comma-separated, or `all` for the full catalogue. Omitting every filter returns an empty list rather than 8 MB of cameras.', example: 'uk' },
           { name: 'lat', desc: 'Latitude for a radius search.', example: '51.5072' },
           { name: 'lng', desc: 'Longitude for a radius search.', example: '-0.1276' },
           { name: 'radius', desc: 'Radius in kilometres. Requires `lat` and `lng`.', example: '25' },
+          { name: 'bbox', desc: 'Clip results to `west,south,east,north`. Combined with lat/lng this is the intersection of the radius and the map view.', example: '-0.3,51.4,0.1,51.6' },
+          { name: 'count', desc: 'Set to `1` to return cached totals without serialising cameras (used by `/api/stats`).', example: '1' },
         ],
         returns: ['cameras', 'regions', 'total', 'timestamp'],
       },

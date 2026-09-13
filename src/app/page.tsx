@@ -38,6 +38,14 @@ import { toShape, queryRing, type DrawMode, type DrawnShape, type DrawProgress, 
 import { attachBrowserZoomGuard } from '@/lib/map-page-zoom';
 import { addCameraToGridSlots, loadCctvGridState, normalizeGridSlots, saveCctvGridState } from '@/lib/cctv-grid-storage';
 import { pickPuertaBlancaGrid } from '@/lib/cctv-priority';
+import {
+  formatBbox,
+  mergeCamerasForViewport,
+  radiusKmForZoom,
+  shouldFetchCctv,
+  viewportChangedEnough,
+  type CctvViewport,
+} from '@/lib/cctv-viewport';
 import { previewMedia } from '@/lib/camera-preview';
 import { selectInPolygon } from '@/lib/aoi';
 import { diffSweep, appendEvents, type WatchBaseline, type WatchEvent } from '@/lib/watch';
@@ -142,7 +150,6 @@ export default function Dashboard() {
   const [backendStatus, setBackendStatus] = useState<'connecting' | 'connected' | 'error'>('connecting');
   const [mapView, setMapView] = useState({ zoom: 2.5, latitude: 20 });
   const [flyToLocation, setFlyToLocation] = useState<{ lat: number; lng: number; zoom?: number; ts: number } | null>(null);
-  const [globalStats, setGlobalStats] = useState<any>(null);
   const mouseCoordsRef = useRef<{ lat: number; lng: number } | null>(null);
   const coordsDisplayRef = useRef<HTMLDivElement>(null);
   const [locationLabel, setLocationLabel] = useState('');
@@ -262,7 +269,7 @@ export default function Dashboard() {
   const [showRemote, setShowRemote] = useState(false);
   const [showArcGIS, setShowArcGIS] = useState(false);
   const [arcgisLayers, setArcgisLayers] = useState<Array<{ id: string; title: string; url: string; geojson: any; color: string; visible: boolean; opacity: number }>>([]);
-  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number; bounds?: { west: number; south: number; east: number; north: number } } | null>(null);
+  const [mapCenter, setMapCenter] = useState<{ lat: number; lng: number; zoom?: number; bounds?: { west: number; south: number; east: number; north: number } } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<'layers'|'markets'|'intel'|'search'|'recon'|'remote'|null>(null);
   const [mapProjection, setMapProjection] = useState<'globe'|'mercator'>('globe');
@@ -290,7 +297,8 @@ export default function Dashboard() {
   const geocodeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastGeocodedPos = useRef<{ lat: number; lng: number } | null>(null);
 
-  // ── DEFAULT: Most layers OFF — fast initial load ──
+  // ── DEFAULT: heavy feeds OFF. CCTV stays on but is fetched for the
+  //    current map viewport only — never region=all on first paint. ──
   const [activeLayers, setActiveLayers] = useState({
     flights: false,
     private: false,
@@ -405,16 +413,6 @@ export default function Dashboard() {
       window.history.replaceState(null, '', url);
     }, 1500);
   }, [activeLayers]);
-
-  // Global Stats Fetch
-  useEffect(() => {
-    fetch('/api/stats')
-      .then(res => res.json())
-      .then(d => {
-        if (d.stats) setGlobalStats(d.stats);
-      })
-      .catch(console.error);
-  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -699,11 +697,7 @@ export default function Dashboard() {
       fetchEndpoint('/api/fires');
       layerFetchedRef.current.add('fires');
     }
-    // CCTV
-    if (activeLayers.cctv && !layerFetchedRef.current.has('cctv')) {
-      fetchEndpoint(`/api/cctv?region=all&_t=${Date.now()}`);
-      layerFetchedRef.current.add('cctv');
-    }
+    // CCTV is loaded from the map viewport below — never region=all.
     // Maritime
     if (activeLayers.maritime && !layerFetchedRef.current.has('maritime')) {
       fetchEndpoint('/api/maritime', d => ({ maritime_ports: d.ports, maritime_chokepoints: d.chokepoints, maritime_ships: d.ships }));
@@ -884,7 +878,55 @@ export default function Dashboard() {
     return () => source.close();
   }, [activeLayers.malware]);
 
-  // CCTV: loaded once on layer toggle via layerFetchedRef (no viewport polling)
+  // ── CCTV VIEWPORT FETCH — current map only, refetch on substantial pan/zoom ──
+  const cctvViewportRef = useRef<CctvViewport | null>(null);
+  const cctvFetchGen = useRef(0);
+  useEffect(() => {
+    if (!activeLayers.cctv) return;
+    if (!mapCenter) return;
+    const zoom = mapCenter.zoom ?? mapView.zoom;
+    if (!shouldFetchCctv(zoom)) return;
+
+    const nextView: CctvViewport = {
+      lat: mapCenter.lat,
+      lng: mapCenter.lng,
+      zoom,
+      radiusKm: radiusKmForZoom(zoom),
+    };
+    if (!viewportChangedEnough(cctvViewportRef.current, nextView)) return;
+
+    const ac = new AbortController();
+    const timer = setTimeout(async () => {
+      if (!viewportChangedEnough(cctvViewportRef.current, nextView)) return;
+      const gen = ++cctvFetchGen.current;
+      const params = new URLSearchParams({
+        lat: String(nextView.lat),
+        lng: String(nextView.lng),
+        radius: String(nextView.radiusKm),
+      });
+      if (mapCenter.bounds) params.set('bbox', formatBbox(mapCenter.bounds));
+      try {
+        const res = await fetch(`/api/cctv?${params}`, { signal: ac.signal });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (gen !== cctvFetchGen.current) return;
+        const incoming = Array.isArray(json.cameras) ? json.cameras : [];
+        const merged = mergeCamerasForViewport(dataRef.current.cameras || [], incoming, nextView);
+        dataRef.current = { ...dataRef.current, cameras: merged };
+        cctvViewportRef.current = nextView;
+        setDataVersion(v => v + 1);
+        setBackendStatus('connected');
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+        console.warn('[OSIRIS] CCTV viewport fetch failed:', e instanceof Error ? e.message : e);
+      }
+    }, 280);
+
+    return () => {
+      clearTimeout(timer);
+      ac.abort();
+    };
+  }, [activeLayers.cctv, mapCenter]);
 
   // Reactive layer fetch: handled by layerFetchedRef above (no duplicate)
 

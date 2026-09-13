@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { cachedSource, clearSourceCache } from './sourceCache';
+import { cachedSource, clearSourceCache, peekCachedLength } from './sourceCache';
 
 type Cam = { id: string };
 const cam = (id: string): Cam => ({ id });
@@ -75,5 +75,12 @@ describe('cachedSource', () => {
     const b = cachedSource<Cam>('t7b', async () => [cam('b')]);
     expect(await a()).toEqual([cam('a')]);
     expect(await b()).toEqual([cam('b')]);
+  });
+
+  it('peeks a cached length without refetching', async () => {
+    expect(peekCachedLength('t8')).toBe(0);
+    const load = cachedSource<Cam>('t8', async () => [cam('a'), cam('b')]);
+    await load();
+    expect(peekCachedLength('t8')).toBe(2);
   });
 });

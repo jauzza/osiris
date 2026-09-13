@@ -52,7 +52,7 @@ interface OsirisMapProps {
    */
   drawCommand?: { action: DrawAction["type"]; seq: number } | null;
   onDrawComplete?: (result: DrawResult) => void;
-  onMapCenter?: (coords: { lat: number; lng: number; bounds?: { west: number; south: number; east: number; north: number } }) => void;
+  onMapCenter?: (coords: { lat: number; lng: number; zoom?: number; bounds?: { west: number; south: number; east: number; north: number } }) => void;
   /** Active turn-by-turn route drawn as a line with origin/destination pins. */
   route?: {
     geometry: { type: 'LineString'; coordinates: [number, number][] };
@@ -2941,6 +2941,7 @@ function OsirisMap({ data, activeLayers, onEntityClick, onMouseCoords, onRightCl
       onMapCenter?.({
         lat: c.lat,
         lng: c.lng,
+        zoom: map.getZoom(),
         bounds: b ? { west: b.getWest(), south: b.getSouth(), east: b.getEast(), north: b.getNorth() } : undefined,
       });
     };

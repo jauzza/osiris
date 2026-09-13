@@ -4,6 +4,11 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Maximize2 } from 'lucide-react';
 import { freshen, previewMedia, refreshInterval, VIDEO_KINDS, type PreviewKind } from '@/lib/camera-preview';
 import { cctvPriorityRank, inCostaDelSolBbox } from '@/lib/cctv-priority';
+import {
+  CCTV_PREVIEW_MAX_TILES,
+  CCTV_PREVIEW_MAX_VIDEO_TILES,
+  CCTV_PREVIEW_MIN_ZOOM,
+} from '@/lib/cctv-viewport';
 import { layoutTile, tileHeight, tilesOverlap, type TileGeometry } from '@/lib/map-tile-layout';
 import type { Map as MlMap } from 'maplibre-gl';
 
@@ -17,19 +22,21 @@ import type { Map as MlMap } from 'maplibre-gl';
  * Most of the ~19,000 are JPEG snapshot feeds, which cost one request per
  * refresh. The ones that are video get a tile too — Quebec 511 alone is 675
  * MP4 cameras, and leaving them as dots read as "no camera here" rather than
- * "this one needs a player" — but no more than MAX_VIDEO_TILES play at once,
- * because decoding is what the frame budget actually goes on. Beyond that a
- * video camera stays a dot and opens on click, as embeds always do.
+ * "this one needs a player" — but no more than CCTV_PREVIEW_MAX_VIDEO_TILES
+ * play at once, because decoding is what the frame budget actually goes on.
+ * Beyond that a video camera stays a dot and opens on click, as embeds always
+ * do. Tiles stay off below CCTV_PREVIEW_MIN_ZOOM so a globe pan cannot fan
+ * out /api/cctv/proxy.
  *
  * Positions are written straight to the DOM on every map `move`, so panning
  * does not re-render React 60 times a second. Which cameras are shown is
  * recomputed only when the map settles.
  */
 
-const MIN_ZOOM = 13;
-const MAX_TILES = 8;
+const MIN_ZOOM = CCTV_PREVIEW_MIN_ZOOM;
+const MAX_TILES = CCTV_PREVIEW_MAX_TILES;
 /** Simultaneously decoding tiles. Snapshots fill whatever is left of MAX_TILES. */
-const MAX_VIDEO_TILES = 4;
+const MAX_VIDEO_TILES = CCTV_PREVIEW_MAX_VIDEO_TILES;
 
 /** 16:9 frame, so nothing is letterboxed inside its own container. */
 const GEOM: TileGeometry = { width: 176, imageHeight: 99, labelHeight: 20, gap: 26 };
