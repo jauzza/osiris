@@ -1,0 +1,88 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Testing
+/coverage
+
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local env files
+.env*.local
+.env
+
+# Vercel
+.vercel
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Scanner backend
+scanner/
+
+# Data files
+threatfox.json
+
+# Dev scripts (one-time migration helpers)
+scripts/
+
+# AI agent config files
+CLAUDE.md
+AGENTS.md
+
+# Internal dev notes
+DO_NOT_PUSH.md
+implementation_plan.md
+
+# Security - prevent accidental backup commits
+scanner_backend_backup.js
+
+# Security - Prevent accidental manual leaks
+*Manual*.md
+
+# --- handoff ignores (credentials are kept) ---
+node_modules/
+**/node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+dist/
+build/
+.build/
+.turbo/
+.expo/
+Pods/
+ios/Pods/
+ios/build/
+*.log
+.playwright-mcp/
+.codegraph/
+.cloak/
+downloads/
+profiles/
+*.mov
+*.mp4
+*.mkv
+*.zip
+arctic_shift/
+OPEN_TEN_LEGACY_HANDOFF_PACKAGE/
+OPEN_TEN_LEGACY_HANDOFF_PACKAGE.zip
+OPEN_TEN_TRADE_LEDGER.csv
