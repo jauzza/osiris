@@ -92,6 +92,12 @@ export function cachedSource<T>(
   };
 }
 
+/** Length of a cached index without touching the upstream. 0 if never fetched. */
+export function peekCachedLength(key: string): number {
+  const entry = store.get(key);
+  return Array.isArray(entry?.data) ? entry.data.length : 0;
+}
+
 /** Test seam — drops all cached indexes. */
 export function clearSourceCache(): void {
   store.clear();

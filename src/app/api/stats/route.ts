@@ -23,7 +23,7 @@ export async function GET(req: Request) {
     const [flightsRes, satsRes, cctvRes, weatherRes, infraRes, gdeltRes] = await Promise.allSettled([
       fetch(`${origin}/api/flights`, { signal: AbortSignal.timeout(20000), next: { revalidate: 45 } }),
       fetch(`${origin}/api/satellites`, { signal: AbortSignal.timeout(20000), next: { revalidate: 3600 } }),
-      fetch(`${origin}/api/cctv`, { signal: AbortSignal.timeout(20000), next: { revalidate: 3600 } }),
+      fetch(`${origin}/api/cctv?count=1`, { signal: AbortSignal.timeout(8000), next: { revalidate: 3600 } }),
       fetch(`${origin}/api/weather`, { signal: AbortSignal.timeout(20000), next: { revalidate: 300 } }),
       fetch(`${origin}/api/infrastructure`, { signal: AbortSignal.timeout(20000), next: { revalidate: 86400 } }),
       fetch(`${origin}/api/gdelt`, { signal: AbortSignal.timeout(20000), next: { revalidate: 300 } })
@@ -52,7 +52,7 @@ export async function GET(req: Request) {
 
     if (cctvRes.status === 'fulfilled' && cctvRes.value.ok) {
       const data = await cctvRes.value.json();
-      cctv = data.cameras?.length || 0;
+      cctv = data.total || data.cameras?.length || 0;
     }
 
     if (weatherRes.status === 'fulfilled' && weatherRes.value.ok) {
